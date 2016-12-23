@@ -21,6 +21,7 @@
 #include <mutex>
 #include <vector>
 
+#include <GLFW/glfw3.h>
 #include <librealsense/rs.hpp>
 
 #include "sensors/Sensors.hh"
@@ -32,10 +33,19 @@ public:
 
     std::vector<uint16_t> &get_depth_buffer() override;
 
+    void visualization(bool onoff);
 private:
+
     std::mutex depth_buffer_mtx;
     std::vector<uint16_t> depth_buffer;
 
     std::shared_ptr<rs::context> ctx;
     rs::device *dev = nullptr;
+
+    bool visualization_on = false;
+    GLFWwindow *win = NULL;
+    GLuint texture;
+    uint8_t *frame_buffer;
+
+    void visualize(void);
 };

@@ -15,6 +15,7 @@
 */
 
 #include "sensors/RealSenseCamera.hh"
+#include "utils/DebugUtils.hh"
 
 #include <iostream>
 
@@ -61,6 +62,8 @@ RealSenseCamera::RealSenseCamera(size_t width, size_t height, unsigned int fps) 
     this->dev->start();
 
     this->depth_buffer.resize(this->width * this->height);
+
+    visualization(true);
 }
 catch(const rs::error &e)
 {
@@ -84,6 +87,9 @@ std::vector<uint16_t> &RealSenseCamera::get_depth_buffer() try
     for (size_t i = 0; i < this->width * this->height; i++)
         this->depth_buffer[i] = frame[i];
 
+    if (this->visualization_on)
+        this->visualize();
+
     return this->depth_buffer;
 }
 catch(const rs::error &e)
@@ -92,4 +98,78 @@ catch(const rs::error &e)
         << e.get_failed_args().c_str() << std::endl;
 
     return this->depth_buffer;
+}
+
+void RealSenseCamera::visualization(bool onoff)
+{
+    if (!onoff) {
+        this->visualization_on = false;
+        glfwDestroyWindow(this->win);
+        glfwTerminate();
+        delete this->frame_buffer;
+        return;
+    }
+
+    if (!this->win) {
+        glfwInit();
+        this->win = glfwCreateWindow(this->width, this->height, "RealSense Depth Buffer", 0, 0);
+        this->frame_buffer = new uint8_t[this->width * this->height * 3];
+
+        glGenTextures(1, &this->texture);
+        this->visualization_on = true;
+    }
+
+    printf("Scale:\n");
+    printf("null  : BLACK\n");
+    printf("0.01 m: RED\n");
+    printf("1.25 m: YELLOW\n");
+    printf("2.50 m: GREEN\n");
+    printf("3.75 m: CYAN\n");
+    printf("5.0+ m: BLUE\n");
+}
+
+void RealSenseCamera::visualize(void)
+{
+    glfwMakeContextCurrent(this->win);
+
+    glViewport(0, 0, this->width, this->height);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glPushMatrix();
+    glOrtho(0, this->width, this->height, 0, -1, +1);
+
+    glBindTexture(GL_TEXTURE_2D, this->texture);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, this->width);
+
+    for (unsigned int i = 0; i < this->depth_buffer.size(); i++) {
+        uint8_t *rgb = this->frame_buffer + (3 * i);
+        rainbow_scale(((double)this->depth_buffer[i] * this->scale) / 5.0, rgb);
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, this->width, this->height, 0, GL_RGB,
+        GL_UNSIGNED_BYTE, reinterpret_cast<const GLvoid *>(this->frame_buffer));
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glBindTexture(GL_TEXTURE_2D, this->texture);
+    glEnable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+
+    // Order matters :/
+    glTexCoord2f(0, 0); glVertex2f(0, 0);
+    glTexCoord2f(1, 0); glVertex2f(this->width, 0);
+    glTexCoord2f(1, 1); glVertex2f(this->width, this->height);
+    glTexCoord2f(0, 1); glVertex2f(0, this->height);
+
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glPopMatrix();
+    glfwSwapBuffers(this->win);
 }
