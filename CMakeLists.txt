@@ -129,6 +129,7 @@ add_subdirectory(src/avoidance)
 add_subdirectory(src/common)
 add_subdirectory(src/detection)
 add_subdirectory(src/sensors)
+add_subdirectory(src/utils)
 add_subdirectory(src/vehicles)
 
 # Add library
@@ -137,6 +138,7 @@ add_library(coav SHARED
     $<TARGET_OBJECTS:common>
     $<TARGET_OBJECTS:detection>
     $<TARGET_OBJECTS:sensors>
+    $<TARGET_OBJECTS:utils>
     $<TARGET_OBJECTS:vehicles>)
 
 set_target_properties(coav PROPERTIES
