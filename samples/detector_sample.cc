@@ -113,10 +113,9 @@ int main(int argc, char **argv)
         make_shared<RealSenseCamera>(640, 480, 30);
 
     // Initialize Detector
-    shared_ptr<DepthImageSimpleDetector> obstacle_detector =
-        make_shared<DepthImageSimpleDetector>(depth_camera);
+    shared_ptr<DepthImageObstacleDetector> obstacle_detector =
+        make_shared<DepthImageObstacleDetector>(depth_camera, 5.0);
 
-    cout << "Sensing the obstacles closer than 1.5 meters." << endl;
     while (true) {
 
         // Sense
