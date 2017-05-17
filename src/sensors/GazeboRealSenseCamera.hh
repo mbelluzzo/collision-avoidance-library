@@ -21,6 +21,7 @@
 #include <mutex>
 #include <vector>
 
+#include <GLFW/glfw3.h>
 #include <gazebo/transport/transport.hh>
 
 #include "sensors/Sensors.hh"
@@ -35,6 +36,7 @@ public:
 
     std::vector<uint16_t> &get_depth_buffer() override;
 
+    void visualization(bool onoff);
 private:
     void on_stream_depth_recvd(ConstImageStampedPtr &_msg);
 
@@ -45,4 +47,11 @@ private:
     gazebo::transport::NodePtr gznode;
     gazebo::transport::SubscriberPtr rs_depth_sub;
     bool camera_exists = false;
+
+    bool visualization_on = false;
+    GLFWwindow *win = NULL;
+    GLuint texture;
+    uint8_t *frame_buffer;
+
+    void visualize(void);
 };
