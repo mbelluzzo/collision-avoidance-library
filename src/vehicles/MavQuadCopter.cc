@@ -198,9 +198,9 @@ void MavQuadCopter::set_target_pose(Pose pose)
     this->mav->send_detour_waypoint(global_coord);
 }
 
-void MavQuadCopter::rotate(double angle_deg)
+void MavQuadCopter::rotate(double angle_rad)
 {
-    this->mav->rotate(angle_deg);
+    this->mav->rotate(angle_rad);
 }
 
 bool MavQuadCopter::detour_finished()
