@@ -107,6 +107,7 @@ run_gazebo () {
     # Gazebo engine without GUI.
     # The log can be played through `gazebo -p logfile`
     SDFFILE="${SCRIPT_DIR}/worlds/${WORLD}"
+    gzclient &
     GZCMD="gzserver --record_path $LOGDIR --verbose $SDFFILE"
     run_and_log "$GZCMD" "gzserver"
     GZID=$!
@@ -168,6 +169,7 @@ silentkill () {
 }
 
 cleanup () {
+    killall -9 gzclient
     silentkill $GZSITL_SOCATID # Kill gzsitl socat
     silentkill $COAV_SOCATID # Kill coav_gcs socat
     silentkill $COAVID # Kill coav-control sitl
