@@ -34,6 +34,8 @@ private:
     std::chrono::time_point<std::chrono::system_clock> wp_sent_time =
         std::chrono::system_clock::from_time_t(0);
 
-    enum class avoid_state { moving, detouring };
+    enum class avoid_state { looking, moving, detouring };
     avoid_state avoidance_state = avoid_state::moving;
+
+    bool has_obstacle(const std::vector<Obstacle> &obstacles);
 };

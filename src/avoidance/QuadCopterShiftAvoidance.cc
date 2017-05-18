@@ -36,6 +36,33 @@ QuadCopterShiftAvoidance::QuadCopterShiftAvoidance(
     this->vehicle = quadcopter;
 }
 
+bool QuadCopterShiftAvoidance::has_obstacle(const std::vector<Obstacle> &obstacles)
+{
+    double closest;
+
+    if (obstacles.size()) {
+        closest = defaults::safe_distance + 1;
+        for (Obstacle obs : obstacles) {
+            if (obs.center.x < closest) {
+                closest = obs.center.x;
+            }
+        }
+
+        if (closest > defaults::safe_distance) {
+            return false;
+        }
+
+        // Check if the current mission waypoint is closer than the closest obstacle
+        if (mavlink_vehicles::math::ground_dist(
+                vehicle->mav->get_global_position_int(),
+                vehicle->mav->get_mission_waypoint()) <= closest) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void QuadCopterShiftAvoidance::avoid(const std::vector<Obstacle> &obstacles)
 {
     Pose vehicle_pose = vehicle->vehicle_pose();
@@ -48,87 +75,71 @@ void QuadCopterShiftAvoidance::avoid(const std::vector<Obstacle> &obstacles)
     vehicle->mav->set_autorotate_during_detour(false);
 
     switch (this->avoidance_state) {
-    case avoid_state::detouring: {
-        // The vehicle is detouring. We need to wait for it to finish the
-        // detour before checking for obstacles again.
+    case avoid_state::looking:
+        if (vehicle->mav->is_rotation_active()) {
+            std::cout << "[avoid] waiting rotation..." << std::endl;
+            break;
+        }
+        std::cout << "[avoid] rotation finished" << std::endl;
 
+        if (this->has_obstacle(obstacles)) {
+            std::cout << "[avoid] state = looking around once more..." << std::endl;
+            vehicle->mav->rotate(defaults::detour_wp_angle, false); //TODO: ir no max ate 60, abortar depois disso
+        } else {
+            // Calculate the lookat vector
+            glm::dvec3 wp_dir = glm::normalize(
+                glm::dvec3(-sin(vehicle_pose.yaw()), cos(vehicle_pose.yaw()), 0));
+
+            // Calculate the global position of the waypoint
+            Pose wp = {
+                vehicle_pose.pos + glm::abs(defaults::safe_distance) * wp_dir,
+                glm::dquat(0, 0, 0, 0) };
+
+            // Send the detour waypoint to the vehicle
+            vehicle->set_target_pose(wp);
+
+            // Print info
+            std::cout << "[avoid] state = detouring..." << std::endl;
+
+            std::cout << "[avoid] from (x, y, z): (" <<
+                vehicle_pose.pos.x << ", " <<
+                vehicle_pose.pos.y << ", " <<
+                vehicle_pose.pos.z << ")" << std::endl;
+
+            std::cout << "[avoid] to   (x, y, z): (" <<
+                wp.pos.x << ", " <<
+                wp.pos.y << ", " <<
+                wp.pos.z << ")" << std::endl;
+
+            this->avoidance_state = avoid_state::detouring;
+        }
+
+        break;
+    case avoid_state::detouring:
         if(vehicle->detour_finished()) {
             this->avoidance_state = avoid_state::moving;
+            vehicle->mav->set_autorotate_during_mission(true);
             std::cout << "[avoid] state = moving..." << std::endl;
         }
 
         break;
-    }
-    case avoid_state::moving: {
-        // The vehicle is moving to the target. We need to detect if an
-        // obstacle is found in order to start a detour.
-
-        // If no obstacle was detected, do nothing.
-        if (obstacles.size() == 0) {
-            break;
-        }
-
-        // Get closest obstacle
-        Obstacle closest;
-        closest.center.x = defaults::safe_distance + 1;
-        for (Obstacle obs : obstacles) {
-            if (obs.center.x < closest.center.x) {
-                closest = obs;
-            }
-        }
-
-        if (closest.center.x > defaults::safe_distance) {
-            break;
-        }
-
-        // Check if the current mission waypoint is closer than the closest obstacle
-        if (mavlink_vehicles::math::ground_dist(
-                vehicle->mav->get_global_position_int(),
-                vehicle->mav->get_mission_waypoint()) <= closest.center.x) {
-            break;
-        }
-
+    case avoid_state::moving:
         // Check if we are too close to ground
         if (vehicle_pose.pos.z < defaults::lowest_altitude) {
             break;
         }
 
-        // Calculate the lookat vector
-        glm::dvec3 view_dir =
-            glm::dvec3(-sin(vehicle_pose.yaw()), cos(vehicle_pose.yaw()), 0);
+        // The vehicle is moving to the target. We need to detect if an
+        // obstacle is found in order to start a detour.
+        if (!this->has_obstacle(obstacles)) {
+            break;
+        }
 
-        // Calculate the direction of the detour waypoint (horizontal rotation
-        // around  lookat vector)
-        glm::dvec3 wp_dir =
-            glm::dvec3(view_dir.x * cos(defaults::detour_wp_angle) -
-                           view_dir.y * sin(defaults::detour_wp_angle),
-                       view_dir.x * sin(defaults::detour_wp_angle) +
-                           view_dir.y * cos(defaults::detour_wp_angle),
-                       0.0);
-
-        // Calculate the global position of the waypoint
-        Pose wp =
-            Pose{vehicle_pose.pos + glm::abs(2.0) * glm::normalize(wp_dir),
-                 glm::dquat(0, 0, 0, 0)};
-
-        // Send the detour waypoint to the vehicle
-        vehicle->set_target_pose(wp);
-
-        // Update avoidance state
-        this->avoidance_state = avoid_state::detouring;
-
-        // Print info
-        std::cout << "[avoid] state = detouring..." << std::endl;
-
-        std::cout << "[avoid] wp (x, y, z): " << wp.pos.x << ", " << wp.pos.y
-                  << "," << wp.pos.z << std::endl;
-
-        std::cout << "[avoid] vh (x, y, z): " << vehicle_pose.pos.x << ", "
-                  << vehicle_pose.pos.y << "," << vehicle_pose.pos.z
-                  << std::endl;
-
+        std::cout << "[avoid] state = Obstacle found. Looking around..." << std::endl;
+        vehicle->mav->brake(false);
+        vehicle->mav->rotate(defaults::detour_wp_angle, false); //TODO: 30 graus
+        this->avoidance_state = avoid_state::looking;
         break;
-    }
     }
 
     return;
